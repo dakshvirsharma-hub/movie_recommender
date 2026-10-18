@@ -66,7 +66,8 @@ def goto_details(tmdb_id: int):
 @st.cache_data(ttl=30)  # short cache for autocomplete
 def api_get_json(path: str, params: dict | None = None):
     try:
-        r = requests.get(f"{API_BASE}{path}", params=params, timeout=25)
+        # Timeout is 90s to handle Render free-tier cold starts (can take 30-60s)
+        r = requests.get(f"{API_BASE}{path}", params=params, timeout=90)
         if r.status_code >= 400:
             return None, f"HTTP {r.status_code}: {r.text[:300]}"
         return r.json(), None
@@ -269,11 +270,22 @@ if st.session_state.view == "home":
     # HOME FEED MODE
     st.markdown(f"### 🏠 Home — {home_category.replace('_',' ').title()}")
 
-    home_cards, err = api_get_json(
-        "/home", params={"category": home_category, "limit": 24}
+    st.info(
+        "⏳ **First load may take up to 60 seconds** — the server wakes up from sleep on Render's free tier. "
+        "Subsequent requests will be fast!",
+        icon="🥶",
     )
+
+    with st.spinner("Loading movies… (server may be waking up, please wait)"):
+        home_cards, err = api_get_json(
+            "/home", params={"category": home_category, "limit": 24}
+        )
+
     if err or not home_cards:
-        st.error(f"Home feed failed: {err or 'Unknown error'}")
+        st.error(
+            f"Home feed failed: {err or 'Unknown error'}\n\n"
+            "💡 **Tip:** The server may still be starting up. Try refreshing the page in a moment."
+        )
         st.stop()
 
     poster_grid(home_cards, cols=grid_cols, key_prefix="home_feed")
